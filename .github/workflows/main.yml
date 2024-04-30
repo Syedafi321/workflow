@@ -21,11 +21,10 @@ jobs:
 
     - name: Create Pull Requests
       run: |
-        git fetch origin
         for branch in $(git branch -r | grep 'origin/env/' | sed 's|origin/||'); do
           echo "Creating pull request from main to $branch"
           git checkout $branch
-          hub pull-request -b $branch -h origin/main -m "PR from Main to $branch"
+          hub pull-request -b $branch -h main -m "PR from Main to $branch"
 
     env:
       GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}

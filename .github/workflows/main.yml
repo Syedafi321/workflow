@@ -1,4 +1,4 @@
-name: Automatic PR from main to env branches
+name: Automatic PR from main to env/prod
 
 on:
   push:
@@ -12,25 +12,21 @@ jobs:
       - name: Check out code
         uses: actions/checkout@v2
 
-      - name: Set up Git
-        run: |
-          git config --global user.name 'Syed'
-          git config --global user.email 'syedali.nec@gmail.com'
-
-     
       - name: Install hub
         run: |
           sudo apt-get update
           sudo apt-get install hub
 
-      - name: List env branches
-        id: list_branches
+      - name: Set up Git
         run: |
-          BRANCHES=$(git branch --list 'env/*' | cut -c 3-)
-          echo "::set-output name=branches::$BRANCHES"
+          git config --global user.name 'syed'
+          git config --global user.email 'syed.com'
 
-      - name: Create PR from main to env/prod
+      - name: Create PRs from main to env branches
         run: |
-          hub pull-request -b env/prod -h main -m "Automatic PR from main to env/prod"
+          branches=$(git branch -r | grep 'origin/env/')
+          for branch in $branches; do
+            hub pull-request -b "$branch" -h main -m "Automatic PR from main to $branch"
+          done
         env:
           GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}

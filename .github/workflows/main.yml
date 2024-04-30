@@ -22,10 +22,15 @@ jobs:
           git config --global user.name 'syed'
           git config --global user.email 'syed.com'
 
+      - name: Fetch branch list
+        id: fetch-branches
+        run: |
+          branches=$(curl -s -H "Authorization: token $GITHUB_TOKEN" https://api.github.com/repos/${{ github.repository }}/branches | jq -r '.[] | select(.name | startswith("env/")) | .name')
+          echo "::set-output name=branches::$branches"
+
       - name: Create PRs from main to env branches
         run: |
-          branches=$(git branch -r | grep 'origin/env/')
-          for branch in $branches; do
+          for branch in ${{ steps.fetch-branches.outputs.branches }}; do
             hub pull-request -b "$branch" -h main -m "Automatic PR from main to $branch"
           done
         env:

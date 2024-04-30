@@ -33,4 +33,4 @@ jobs:
         run: |
           hub pull-request -b env/prod -h main -m "Automatic PR from main to env/prod"
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}

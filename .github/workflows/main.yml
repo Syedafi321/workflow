@@ -17,6 +17,12 @@ jobs:
           git config --global user.name 'Syed'
           git config --global user.email 'syedali.nec@gmail.com'
 
+     
+      - name: Install hub
+        run: |
+          sudo apt-get update
+          sudo apt-get install hub
+
       - name: List env branches
         id: list_branches
         run: |

@@ -1,33 +1,22 @@
-name: Create PR for all branches on push to main
-
+name: Create production promotion pull request
 on:
   push:
     branches:
       - main
-
 jobs:
-
-  create-prs:
+  productionPromotion:
     runs-on: ubuntu-latest
-    
     steps:
-    - uses: actions/checkout@v2
-      with:
-        fetch-depth: 0
-        
-    - name: Get all branches
-      id: get-branches
-      run: |
-        branches=$(git for-each-ref --format='%(refname:short)' refs/heads)
-        echo "::set-output name=branches::$branches"
-        
-    - name: Create PRs
-      env:
-        GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
-      run: |
-        for branch in ${{ steps.get-branches.outputs.branches }}
-        do
-          if [ "$branch" != "main" ]; then
-            gh pr create --base main --head $branch --title "Merge $branch into main" --body "This PR merges the $branch branch into the main branch."
-          fi
-        done
+      - uses: actions/checkout@v4
+        with:
+          ref: test
+          token: ${{ secrets.PAT_TOKEN }} # Use the PAT for checkout
+      - name: Reset test branch
+        run: |
+          git fetch origin main:main
+          git reset --hard main
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v6
+        with:
+          branch: test-test
+          token: ${{ secrets.PAT_TOKEN }}

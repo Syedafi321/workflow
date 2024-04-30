@@ -1,4 +1,4 @@
-name: Automatic PR from main to env/prod
+name: Auto Create PR on Push
 
 on:
   push:
@@ -8,30 +8,15 @@ on:
 jobs:
   create_pr:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Check out code
+      - name: Checkout code
         uses: actions/checkout@v2
 
-      - name: Install hub
-        run: |
-          sudo apt-get update
-          sudo apt-get install hub
-
-      - name: Set up Git
-        run: |
-          git config --global user.name 'syed'
-          git config --global user.email 'syed.com'
-
-      - name: Fetch branch list
-        id: fetch-branches
-        run: |
-          branches=$(curl -s -H "Authorization: token $GITHUB_TOKEN" https://api.github.com/repos/${{ github.repository }}/branches | jq -r '.[].name' | grep '^env/')
-          echo "::set-output name=branches::$branches"
-
-      - name: Create PRs from main to env branches
-        run: |
-          for branch in ${{ steps.fetch-branches.outputs.branches }}; do
-            hub pull-request -b "$branch" -h main -m "Automatic PR from main to $branch"
-          done
-        env:
-          GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v3
+        with:
+          token: ${{ secrets.PAT_TOKEN }}
+          branch: env/prod
+          title: "Automated PR: Feature Branch"
+          body: "This is an automated PR created when code is pushed to the main branch."

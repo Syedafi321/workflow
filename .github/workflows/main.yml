@@ -24,14 +24,8 @@ jobs:
         git fetch origin
         for branch in $(git branch -r | grep 'origin/env/' | sed 's|origin/||'); do
           echo "Creating pull request from main to $branch"
-          git checkout -b temp_branch origin/main
           git checkout $branch
-          git merge temp_branch --no-edit
-          git push origin $branch
           hub pull-request -b $branch -h origin/main -m "PR from Main to $branch"
-          git checkout main
-          git branch -D temp_branch
-        done
 
     env:
       GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}

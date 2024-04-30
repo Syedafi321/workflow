@@ -23,11 +23,8 @@ jobs:
           BRANCHES=$(git branch --list 'env/*' | cut -c 3-)
           echo "::set-output name=branches::$BRANCHES"
 
-      - name: Create PRs from main to env branches
+      - name: Create PR from main to env/prod
         run: |
-          BRANCHES="${{ steps.list_branches.outputs.branches }}"
-          for BRANCH in $BRANCHES; do
-            hub pull-request -b $BRANCH -h main -m "Automatic PR from main to $BRANCH"
-          done
+          hub pull-request -b env/prod -h main -m "Automatic PR from main to env/prod"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

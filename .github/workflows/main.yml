@@ -25,9 +25,9 @@ jobs:
         # List all branches that start with env/, stripping the remote part
         for branch in $(git branch -r | grep 'origin/env/' | sed 's|origin/||'); do
           echo "Creating pull request from main to $branch"
-          git checkout $branch
+          git checkout -b $branch origin/$branch || git checkout $branch
           # Create a new pull request
-          hub pull-request -b $branch -h main -m "PR from Main to $branch"
+          hub pull-request -b $branch -h main -m "PR from Main to $branch" || true
         done
 
     env:

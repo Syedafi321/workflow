@@ -1,35 +1,33 @@
 name: Pull request from Main to Env Branches
-
+ 
 on:
   push:
     branches:
       - main
-
+ 
 jobs:
   pr-to-env:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout the repository
-        uses: actions/checkout@v2
-        with:
-          fetch-depth: 0
-
-      - name: Install Hub CLI
-        run: |
-          sudo snap install hub --classic
-
-      - name: Create Pull Requests
-        run: |
-          git fetch origin
-          # List all branches that start with env/, stripping the remote part
-          for branch in $(git branch -r | grep 'origin/env/' | sed 's|origin/||'); do
-            echo "Creating pull request from main to $branch"
-            git checkout main
-            git pull origin main
-            git checkout -b temp_branch
-            git push origin temp_branch
-            hub pull-request -b $branch -h temp_branch -m "PR from Main to $branch"
-          done
-
+    - name: Checkout the repository
+      uses: actions/checkout@v3
+      with:
+        fetch-depth: 0
+        token: ${{ secrets.PAT_TOKEN }}
+ 
+    - name: Install Hub CLI
+      run: |
+        sudo snap install hub --classic
+ 
+    - name: Create Pull Requests
+      run: |
+        git fetch origin
+        # List all branches that start with env/, stripping the remote part
+        for branch in $(git branch -r | grep 'origin/env/' | sed 's|origin/||'); do
+          echo "Creating pull request from main to $branch"
+          git checkout $branch
+          hub pull-request -b $branch -h main -m "PR from Main to $branch"
+        done
+ 
     env:
       GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}

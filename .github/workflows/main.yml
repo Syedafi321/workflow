@@ -1,10 +1,10 @@
 name: Pull request from Main to Env Branches
- 
+
 on:
   push:
     branches:
       - main
- 
+
 jobs:
   pr-to-env:
     runs-on: ubuntu-latest
@@ -14,20 +14,25 @@ jobs:
       with:
         fetch-depth: 0
         token: ${{ secrets.PAT_TOKEN }}
- 
+
     - name: Install Hub CLI
       run: |
         sudo snap install hub --classic
- 
+
     - name: Create Pull Requests
       run: |
         git fetch origin
-        # List all branches that start with env/, stripping the remote part
         for branch in $(git branch -r | grep 'origin/env/' | sed 's|origin/||'); do
-          echo "Creating pull request from main to $branch"
-          git checkout $branch
-          hub pull-request -b $branch -h main -m "PR from Main to $branch"
+          echo "Checking if a pull request already exists for $branch"
+          existing_pr=$(curl -s -X GET -H "Authorization: Bearer ${{ secrets.PAT_TOKEN }}" "https://api.github.com/repos/$GITHUB_REPOSITORY/pulls?head=main&base=$branch")
+          if [[ $(echo "$existing_pr" | jq -r ".[].head.ref") == "main" ]]; then
+            echo "A pull request already exists from main to $branch. Skipping..."
+          else
+            echo "Creating pull request from main to $branch"
+            git checkout $branch
+            hub pull-request -b $branch -h main -m "PR from Main to $branch"
+          fi
         done
- 
+
     env:
       GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}

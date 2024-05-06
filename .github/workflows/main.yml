@@ -1,4 +1,4 @@
-name: Auto Create PR on Push
+name: Pull request from Main to Env Branches
 
 on:
   push:
@@ -6,17 +6,30 @@ on:
       - main
 
 jobs:
-  create_pr:
+  pr-to-env:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout code
+      - name: Checkout the repository
         uses: actions/checkout@v2
-
-      - name: Create Pull Request
-        uses: peter-evans/create-pull-request@v3
         with:
-          token: ${{ secrets.PAT_TOKEN }}
-          branch: env/prod
-          title: "Automated PR: Feature Branch"
-          body: "This is an automated PR created when code is pushed to the main branch."
+          fetch-depth: 0
+
+      - name: Install Hub CLI
+        run: |
+          sudo snap install hub --classic
+
+      - name: Create Pull Requests
+        run: |
+          git fetch origin
+          # List all branches that start with env/, stripping the remote part
+          for branch in $(git branch -r | grep 'origin/env/' | sed 's|origin/||'); do
+            echo "Creating pull request from main to $branch"
+            git checkout main
+            git pull origin main
+            git checkout -b temp_branch
+            git push origin temp_branch
+            hub pull-request -b $branch -h temp_branch -m "PR from Main to $branch"
+          done
+
+    env:
+      GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}

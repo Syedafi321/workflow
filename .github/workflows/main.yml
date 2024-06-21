@@ -1,4 +1,4 @@
-name: Pull request from Auto Main to qay branch
+name: Pull request from Main to env/test branch
 
 on:
   pull_request:
@@ -20,8 +20,8 @@ jobs:
     - name: Install Hub CLI
       run: |
         sudo snap install hub --classic
- 
-    - name: Create Pull Request to env/test
+
+    - name: Create or Update Pull Request to env/test
       id: create_pr
       run: |
         git fetch origin
@@ -29,15 +29,15 @@ jobs:
         echo "Checking if a pull request already exists for $branch"
         existing_pr=$(curl -s -X GET -H "Authorization: Bearer ${{ secrets.JOSYS_GITHUB_TOKEN }}" "https://api.github.com/repos/$GITHUB_REPOSITORY/pulls?head=main&base=$branch")
         if [[ $(echo "$existing_pr" | jq -r ".[].head.ref") == "main" ]]; then
-          echo "A pull request already exists from main to $branch. Skipping..."
+          echo "A pull request already exists from main to $branch."
+          pr_url=$(echo "$existing_pr" | jq -r ".[0].html_url")
         else
           echo "Creating pull request from main to $branch"
-          hub pull-request -b $branch -h main -m "PR from main to $branch"
+          pr_url=$(hub pull-request -b $branch -h main -m "PR from main to $branch")
         fi
-        echo "::set-output name=pr_url::$(hub pr list -b $branch -h main -f '%U')"
+        echo "::set-output name=pr_url::$pr_url"
  
-    - name: Transfer Labels
-      if: steps.create_pr.outputs.pr_url != ''
+    - name: Manage Labels
       run: |
         pr_url=${{ steps.create_pr.outputs.pr_url }}
         pr_number=$(echo $pr_url | awk -F/ '{print $NF}')
@@ -46,11 +46,16 @@ jobs:
         # Get labels from the merged PR
         labels=$(curl -s -X GET -H "Authorization: Bearer ${{ secrets.JOSYS_GITHUB_TOKEN }}" "https://api.github.com/repos/$GITHUB_REPOSITORY/issues/$merged_pr_number/labels" | jq -r '.[].name')
         
-        # Apply labels to the new PR
-        for label in $labels; do
-          curl -s -X POST -H "Authorization: Bearer ${{ secrets.JOSYS_GITHUB_TOKEN }}" -H "Content-Type: application/json" \
-            --data "{\"labels\":[\"$label\"]}" "https://api.github.com/repos/$GITHUB_REPOSITORY/issues/$pr_number/labels"
-        done
+        if [[ -z "$labels" ]]; then
+          echo "No labels found on the merged PR. Removing labels from the new PR."
+          curl -s -X DELETE -H "Authorization: Bearer ${{ secrets.JOSYS_GITHUB_TOKEN }}" "https://api.github.com/repos/$GITHUB_REPOSITORY/issues/$pr_number/labels"
+        else
+          echo "Transferring labels to the new PR."
+          for label in $labels; do
+            curl -s -X POST -H "Authorization: Bearer ${{ secrets.JOSYS_GITHUB_TOKEN }}" -H "Content-Type: application/json" \
+              --data "{\"labels\":[\"$label\"]}" "https://api.github.com/repos/$GITHUB_REPOSITORY/issues/$pr_number/labels"
+          done
+        fi
  
     env:
       GITHUB_TOKEN: ${{ secrets.JOSYS_GITHUB_TOKEN }}

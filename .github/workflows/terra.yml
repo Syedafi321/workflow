@@ -1,0 +1,22 @@
+name: "Terraform action"
+on:
+  pull_request:
+    types: [labeled]
+    branches:
+      - 'env/**'
+  push:
+    branches:
+      - 'env/**'
+   
+jobs:
+  deploy:
+    if: contains(github.event.pull_request.labels.*.name, 'terraform-plan') 
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Determine TARGET_BRANCH
+        id: determine_target_branch
+        run: |
+          pwd

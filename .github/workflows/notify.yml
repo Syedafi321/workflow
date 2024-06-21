@@ -3,7 +3,7 @@ name: Daily Pull Request Report
 on:
   schedule:
     - cron: '0 9 * * *'  # Runs at 9 AM UTC every day
-  workflow_dispatch:
+  workflow_dispatch:  # Allows manual triggering
 
 jobs:
   generate-pr-report:
@@ -11,6 +11,16 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install openpyxl
 
       - name: Get open pull requests
         id: get-prs
@@ -31,43 +41,69 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.JOSYS_GITHUB_TOKEN }}
 
-      - name: Generate report
-        id: generate-report
+      - name: Generate Excel report
         run: |
-          prs='${{ steps.get-prs.outputs.prs }}'
-          if [ "$prs" = "[]" ]; then
-            echo "report=No open pull requests" >> $GITHUB_OUTPUT
-          else
-            report=""
-            while read -r pr; do
-              number=$(echo $pr | jq -r '.number')
-              title=$(echo $pr | jq -r '.title')
-              author=$(echo $pr | jq -r '.author')
-              created_at=$(echo $pr | jq -r '.created_at')
-              head_branch=$(echo $pr | jq -r '.head_branch')
-              base_branch=$(echo $pr | jq -r '.base_branch')
-              changed_files=$(echo $pr | jq -r '.changed_files')
-              reviewers=$(echo $pr | jq -r '.reviewers')
-              days_open=$(( ( $(date +%s) - $(date -d "$created_at" +%s) ) / 86400 ))
-              
-              report+="PR #$number: $title\n"
-              report+="Created by: $author\n"
-              report+="From: $head_branch -> $base_branch\n"
-              report+="Files changed: $changed_files\n"
-              report+="Days open: $days_open\n"
-              report+="Reviewers: $reviewers\n\n"
-            done <<< "$(echo $prs | jq -c '.[]')"
-            echo "report<<EOF" >> $GITHUB_OUTPUT
-            echo "$report" >> $GITHUB_OUTPUT
-            echo "EOF" >> $GITHUB_OUTPUT
-          fi
+          import json
+          import datetime
+          from openpyxl import Workbook
+          from openpyxl.styles import Font, Alignment
+
+          prs = json.loads('${{ steps.get-prs.outputs.prs }}')
+
+          wb = Workbook()
+          ws = wb.active
+          ws.title = "Pull Requests Report"
+
+          headers = ["PR #", "Title", "Created By", "From Branch", "To Branch", "Files Changed", "Days Open", "Reviewers"]
+          for col, header in enumerate(headers, start=1):
+              cell = ws.cell(row=1, column=col, value=header)
+              cell.font = Font(bold=True)
+              cell.alignment = Alignment(horizontal='center')
+
+          if not prs:
+              ws.append(["No open pull requests"])
+          else:
+              for row, pr in enumerate(prs, start=2):
+                  created_at = datetime.datetime.fromisoformat(pr['created_at'].replace('Z', '+00:00'))
+                  days_open = (datetime.datetime.now(datetime.timezone.utc) - created_at).days
+                  ws.append([
+                      pr['number'],
+                      pr['title'],
+                      pr['author'],
+                      pr['head_branch'],
+                      pr['base_branch'],
+                      pr['changed_files'],
+                      days_open,
+                      pr['reviewers']
+                  ])
+
+          for column in ws.columns:
+              max_length = 0
+              column_letter = column[0].column_letter
+              for cell in column:
+                  try:
+                      if len(str(cell.value)) > max_length:
+                          max_length = len(cell.value)
+                  except:
+                      pass
+              adjusted_width = (max_length + 2)
+              ws.column_dimensions[column_letter].width = adjusted_width
+
+          wb.save("pr_report.xlsx")
+        shell: python
+
+      - name: Upload Excel report
+        uses: actions/upload-artifact@v3
+        with:
+          name: pr-report
+          path: pr_report.xlsx
 
       - name: Send to Slack
         uses: slackapi/slack-github-action@v1
         with:
           payload: |
             {
-              "text": "Daily Pull Request Report:\n${{ steps.generate-report.outputs.report }}"
+              "text": "Daily Pull Request Report is ready. You can download it from the GitHub Actions artifacts."
             }
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}

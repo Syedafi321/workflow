@@ -4,6 +4,7 @@ on:
   schedule:
     # This is in UTC. 7:08 AM IST is 1:38 AM UTC
     - cron: '38 1 * * *'
+  workflow_dispatch: # Allows manual trigger
 
 jobs:
   pr_report:

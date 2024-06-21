@@ -20,7 +20,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install openpyxl
+          pip install openpyxl requests
 
       - name: Get open pull requests
         id: get-prs
@@ -39,12 +39,16 @@ jobs:
           ')
           echo "prs=$prs" >> $GITHUB_OUTPUT
         env:
-          GH_TOKEN: ${{ secrets.JOSYS_GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Generate Excel report
+      - name: Generate Excel report and send to Slack
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          SLACK_CHANNEL_ID: ${{ secrets.SLACK_CHANNEL_ID }}
         run: |
           import json
           import datetime
+          import requests
           from openpyxl import Workbook
           from openpyxl.styles import Font, Alignment
 
@@ -89,21 +93,23 @@ jobs:
               adjusted_width = (max_length + 2)
               ws.column_dimensions[column_letter].width = adjusted_width
 
-          wb.save("pr_report.xlsx")
+          filename = "pr_report.xlsx"
+          wb.save(filename)
+
+          # Send file to Slack
+          with open(filename, 'rb') as file_content:
+              files = {'file': file_content}
+              data = {
+                  'channels': '${{ secrets.SLACK_CHANNEL_ID }}',
+                  'initial_comment': 'Here is the daily Pull Request report:'
+              }
+              response = requests.post(
+                  'https://slack.com/api/files.upload',
+                  headers={'Authorization': 'Bearer ${{ secrets.SLACK_BOT_TOKEN }}'},
+                  data=data,
+                  files=files
+              )
+          
+          if not response.json()['ok']:
+              raise Exception(f"Failed to send file to Slack: {response.json()['error']}")
         shell: python
-
-      - name: Upload Excel report
-        uses: actions/upload-artifact@v3
-        with:
-          name: pr-report
-          path: pr_report.xlsx
-
-      - name: Send to Slack
-        uses: slackapi/slack-github-action@v1
-        with:
-          payload: |
-            {
-              "text": "Daily Pull Request Report is ready. You can download it from the GitHub Actions artifacts."
-            }
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}

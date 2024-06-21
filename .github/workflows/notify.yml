@@ -26,4 +26,4 @@ jobs:
         env:
           JOSYS_GITHUB_TOKEN: ${{ secrets.JOSYS_GITHUB_TOKEN }}
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-        run: node .github/scripts/generate-pr-report.js
+        run: node .github/scripts/generate-pr-report.mjs

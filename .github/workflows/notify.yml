@@ -1,0 +1,28 @@
+name: Daily PR Report
+
+on:
+  schedule:
+    - cron: '25 1 * * *' # This schedules the workflow to run daily at 1:22 AM UTC (6:52 AM IST)
+  workflow_dispatch: # Allows manual trigger
+
+jobs:
+  pr_report:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v2
+        with:
+          node-version: '14'
+
+      - name: Install dependencies
+        run: npm install axios @actions/github @octokit/rest
+
+      - name: Generate and send PR report
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: node .github/scripts/generate-pr-report.js

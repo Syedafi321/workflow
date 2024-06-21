@@ -1,15 +1,15 @@
-const axios = require('axios');
-const { Octokit } = require("@octokit/rest");
-const github = require('@actions/github');
+import axios from 'axios';
+import { Octokit } from "@octokit/rest";
+import { context } from '@actions/github';
 
 const octokit = new Octokit({
-  auth: process.env.JOSYS_GITHUB_TOKEN
+  auth: process.env.GITHUB_TOKEN
 });
 
 async function getOpenPullRequests() {
   const { data: pullRequests } = await octokit.pulls.list({
-    owner: github.context.repo.owner,
-    repo: github.context.repo.repo,
+    owner: context.repo.owner,
+    repo: context.repo.repo,
     state: 'open'
   });
 
@@ -37,8 +37,8 @@ async function getReviewers(owner, repo, pull_number) {
 
 async function generateReport() {
   const pullRequests = await getOpenPullRequests();
-  const owner = github.context.repo.owner;
-  const repo = github.context.repo.repo;
+  const owner = context.repo.owner;
+  const repo = context.repo.repo;
 
   if (pullRequests.length === 0) {
     return 'No open pull requests at the moment.';

@@ -23,6 +23,6 @@ jobs:
 
       - name: Generate and send PR report
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          JOSYS_GITHUB_TOKEN: ${{ secrets.JOSYS_GITHUB_TOKEN }}
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
         run: node .github/scripts/generate-pr-report.js

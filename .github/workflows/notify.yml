@@ -2,7 +2,7 @@ name: Daily PR Report
 
 on:
   schedule:
-    - cron: '25 1 * * *' # This schedules the workflow to run daily at 1:22 AM UTC (6:52 AM IST)
+    - cron: '29 1 * * *' # This schedules the workflow to run daily at 1:22 AM UTC (6:52 AM IST)
   workflow_dispatch: # Allows manual trigger
 
 jobs:

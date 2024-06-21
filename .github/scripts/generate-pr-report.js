@@ -3,7 +3,7 @@ const { Octokit } = require("@octokit/rest");
 const github = require('@actions/github');
 
 const octokit = new Octokit({
-  auth: process.env.GITHUB_TOKEN
+  auth: process.env.JOSYS_GITHUB_TOKEN
 });
 
 async function getOpenPullRequests() {

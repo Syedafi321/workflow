@@ -27,14 +27,14 @@ jobs:
         git fetch origin
         branch="env/test"
         echo "Checking if a pull request already exists for $branch"
-        existing_pr=$(curl -s -X GET -H "Authorization: Bearer ${{ secrets.JOSYS_GITHUB_TOKEN }}" "https://api.github.com/repos/$GITHUB_REPOSITORY/pulls?head=feat/auto-main&base=$branch")
-        if [[ $(echo "$existing_pr" | jq -r ".[].head.ref") == "feat/auto-main" ]]; then
-          echo "A pull request already exists from feat/auto-main to $branch. Skipping..."
+        existing_pr=$(curl -s -X GET -H "Authorization: Bearer ${{ secrets.JOSYS_GITHUB_TOKEN }}" "https://api.github.com/repos/$GITHUB_REPOSITORY/pulls?head=main&base=$branch")
+        if [[ $(echo "$existing_pr" | jq -r ".[].head.ref") == "main" ]]; then
+          echo "A pull request already exists from main to $branch. Skipping..."
         else
-          echo "Creating pull request from feat/auto-main to $branch"
-          hub pull-request -b $branch -h feat/auto-main -m "PR from feat/auto-main to $branch"
+          echo "Creating pull request from main to $branch"
+          hub pull-request -b $branch -h main -m "PR from main to $branch"
         fi
-        echo "::set-output name=pr_url::$(hub pr list -b $branch -h feat/auto-main -f '%U')"
+        echo "::set-output name=pr_url::$(hub pr list -b $branch -h main -f '%U')"
  
     - name: Transfer Labels
       if: steps.create_pr.outputs.pr_url != ''

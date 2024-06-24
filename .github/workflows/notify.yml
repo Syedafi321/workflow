@@ -2,7 +2,6 @@ name: Daily Pull Request Report
 
 on:
   push:
-    
 
 jobs:
   generate-pr-report:
@@ -14,7 +13,7 @@ jobs:
       - name: Get open pull requests
         id: get-prs
         run: |
-          prs=$(gh pr list --json number,title,author,createdAt,headRefName,baseRefName,changedFiles,reviewRequests --jq '
+          prs=$(gh pr list --json number,title,author,createdAt,headRefName,baseRefName,changedFiles,reviewRequests,mergeable --jq '
             map({
               number: .number,
               title: .title,
@@ -23,7 +22,8 @@ jobs:
               head_branch: .headRefName,
               base_branch: .baseRefName,
               changed_files: .changedFiles,
-              reviewers: [.reviewRequests[].login] | join(", ")
+              reviewers: [.reviewRequests[].login] | join(", "),
+              mergeable: .mergeable
             }) | tojson
           ')
           echo "prs=$prs" >> $GITHUB_OUTPUT
@@ -47,6 +47,7 @@ jobs:
               base_branch=$(echo $pr | jq -r '.base_branch')
               changed_files=$(echo $pr | jq -r '.changed_files')
               reviewers=$(echo $pr | jq -r '.reviewers')
+              mergeable=$(echo $pr | jq -r '.mergeable')
               days_open=$(( ( $(date +%s) - $(date -d "$created_at" +%s) ) / 86400 ))
               
               report+="PR #$number: $title\n"
@@ -54,7 +55,13 @@ jobs:
               report+="From: $head_branch -> $base_branch\n"
               report+="Files changed: $changed_files\n"
               report+="Days open: $days_open\n"
-              report+="Reviewers: $reviewers\n\n"
+              report+="Reviewers: $reviewers\n"
+              if [ "$mergeable" = "CONFLICTING" ]; then
+                report+="Merge conflicts: Yes\n"
+              else
+                report+="Merge conflicts: No\n"
+              fi
+              report+="\n"
             done <<< "$(echo $prs | jq -c '.[]')"
             echo "report<<EOF" >> $GITHUB_OUTPUT
             echo "$report" >> $GITHUB_OUTPUT

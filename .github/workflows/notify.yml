@@ -30,10 +30,28 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.JOSYS_GITHUB_TOKEN }}
 
+      - name: Get merge conflicts for PRs
+        id: get-conflicts
+        run: |
+          prs='${{ steps.get-prs.outputs.prs }}'
+          conflicts="{}"
+          while read -r pr; do
+            number=$(echo $pr | jq -r '.number')
+            mergeable=$(echo $pr | jq -r '.mergeable')
+            if [ "$mergeable" = "CONFLICTING" ]; then
+              conflict_files=$(gh pr view $number --json files --jq '.files | map(select(.mergeConflict == true) | .path) | join(", ")')
+              conflicts=$(echo $conflicts | jq --argjson number $number --arg conflict_files "$conflict_files" '. + {($number): $conflict_files}')
+            fi
+          done <<< "$(echo $prs | jq -c '.[]')"
+          echo "conflicts=$conflicts" >> $GITHUB_OUTPUT
+        env:
+          GH_TOKEN: ${{ secrets.JOSYS_GITHUB_TOKEN }}
+
       - name: Generate report
         id: generate-report
         run: |
           prs='${{ steps.get-prs.outputs.prs }}'
+          conflicts='${{ steps.get-conflicts.outputs.conflicts }}'
           if [ "$prs" = "[]" ]; then
             echo "report=No open pull requests" >> $GITHUB_OUTPUT
           else
@@ -49,7 +67,7 @@ jobs:
               reviewers=$(echo $pr | jq -r '.reviewers')
               mergeable=$(echo $pr | jq -r '.mergeable')
               days_open=$(( ( $(date +%s) - $(date -d "$created_at" +%s) ) / 86400 ))
-              
+
               report+="PR #$number: $title\n"
               report+="Created by: $author\n"
               report+="From: $head_branch -> $base_branch\n"
@@ -57,7 +75,9 @@ jobs:
               report+="Days open: $days_open\n"
               report+="Reviewers: $reviewers\n"
               if [ "$mergeable" = "CONFLICTING" ]; then
+                conflict_files=$(echo $conflicts | jq -r --argjson number $number '.[$number]')
                 report+="Merge conflicts: Yes\n"
+                report+="Files with conflicts: $conflict_files\n"
               else
                 report+="Merge conflicts: No\n"
               fi

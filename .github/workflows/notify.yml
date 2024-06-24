@@ -1,7 +1,10 @@
 name: Daily Pull Request Report
 
 on:
-  push:
+  workflow_dispatch:
+  schedule:
+    - cron: '05 04 * * *' 
+
 
 jobs:
   generate-pr-report:

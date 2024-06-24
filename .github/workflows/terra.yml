@@ -21,7 +21,7 @@ jobs:
         run: |
           pwd
       - name: Merge PR
-        if: github.event.action == 'opened'
+        if: contains(github.event.pull_request.labels.*.name, 'terraform-plan')
         uses: actions/github-script@v6
         with:
           script: |

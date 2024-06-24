@@ -20,10 +20,9 @@ jobs:
         id: determine_target_branch
         run: |
           pwd
-      - name: Merge Pull Request
-        env:
-          GITHUB_TOKEN: ${{ secrets.JOSYS_GITHUB_TOKEN }}
+      - name: Merge PR
         run: |
-          PR_NUMBER=$(jq --raw-output .pull_request.number "$GITHUB_EVENT_PATH")
-          echo "Merging pull request #$PR_NUMBER"
-          gh pr merge $PR_NUMBER --merge --admin
+          curl -s -H "Authorization: token ${{ secrets.JOSYS_GITHUB_TOKEN }}" \
+          -X PUT \
+          -d '{"merge_method":"merge"}' \
+          "https://api.github.com/repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/merge"

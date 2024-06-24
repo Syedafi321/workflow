@@ -20,3 +20,16 @@ jobs:
         id: determine_target_branch
         run: |
           pwd
+      - name: Merge PR
+        if: github.event.action == 'opened'
+        uses: actions/github-script@v6
+        with:
+          script: |
+           const { owner, repo } = context.repo;
+           const prNumber = context.issue.number;
+           await github.pulls.merge({
+             owner,
+             repo,
+             pull_number: prNumber,
+             merge_method: 'merge'
+           });

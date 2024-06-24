@@ -40,7 +40,7 @@ jobs:
             mergeable=$(echo $pr | jq -r '.mergeable')
             if [ "$mergeable" = "CONFLICTING" ]; then
               conflict_files=$(gh pr view $number --json files --jq '.files | map(select(.mergeConflict == true) | .path) | join(", ")')
-              conflicts=$(echo $conflicts | jq --argjson number $number --arg conflict_files "$conflict_files" '. + {($number): $conflict_files}')
+              conflicts=$(echo $conflicts | jq --arg number "$number" --arg conflict_files "$conflict_files" '. + {($number): $conflict_files}')
             fi
           done <<< "$(echo $prs | jq -c '.[]')"
           echo "conflicts=$conflicts" >> $GITHUB_OUTPUT
@@ -75,7 +75,7 @@ jobs:
               report+="Days open: $days_open\n"
               report+="Reviewers: $reviewers\n"
               if [ "$mergeable" = "CONFLICTING" ]; then
-                conflict_files=$(echo $conflicts | jq -r --argjson number $number '.[$number]')
+                conflict_files=$(echo $conflicts | jq -r --arg number "$number" '.[$number]')
                 report+="Merge conflicts: Yes\n"
                 report+="Files with conflicts: $conflict_files\n"
               else

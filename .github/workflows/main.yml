@@ -23,11 +23,18 @@ jobs:
         run: |
           sudo snap install hub --classic
 
+      - name: Fetch env branches
+        id: fetch_env_branches
+        run: |
+          git fetch --all
+          branches=$(git branch -r | grep 'origin/env/' | sed 's|origin/||')
+          echo "::set-output name=branches::$(echo $branches | tr '\n' ' ')"
+
       - name: Create or Update Pull Requests to env branches
         id: create_prs
         run: |
           git fetch origin
-          branches=("env/qay" "env/test" "env/file")
+          branches=(${{ steps.fetch_env_branches.outputs.branches }})
           for branch in "${branches[@]}"; do
             echo "Checking if a pull request already exists for $branch"
             existing_pr=$(curl -s -X GET -H "Authorization: Bearer $GITHUB_TOKEN" "https://api.github.com/repos/$GITHUB_REPOSITORY/pulls?head=main&base=$branch")

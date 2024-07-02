@@ -12,6 +12,8 @@ jobs:
     runs-on: ubuntu-latest
     env:
       GITHUB_TOKEN: ${{ secrets.JOSYS_GITHUB_TOKEN }}
+      EXCLUDE_BRANCHES: ${{ secrets.EXCLUDE_BRANCHES }}
+      INCLUDE_BRANCHES: ${{ secrets.INCLUDE_BRANCHES }}
     steps:
       - name: Checkout the repository
         uses: actions/checkout@v3
@@ -45,9 +47,9 @@ jobs:
             fi
           }
 
-          # Define branches to exclude and include
-          EXCLUDE_BRANCHES=("env/file")
-          INCLUDE_BRANCHES=("pr-test")
+          # Parse the secrets into arrays
+          IFS=', ' read -r -a EXCLUDE_BRANCHES <<< "${EXCLUDE_BRANCHES}"
+          IFS=', ' read -r -a INCLUDE_BRANCHES <<< "${INCLUDE_BRANCHES}"
 
           # Fetch branches and process inclusion and exclusion
           git fetch origin

@@ -12,6 +12,8 @@ jobs:
     runs-on: ubuntu-latest
     env:
       GITHUB_TOKEN: ${{ secrets.JOSYS_GITHUB_TOKEN }}
+      EXCLUDE_BRANCHES: ${{ secrets.EXCLUDE_BRANCHES }}
+      INCLUDE_BRANCHES: ${{ secrets.INCLUDE_BRANCHES }}
     steps:
       - name: Checkout the repository
         uses: actions/checkout@v3
@@ -45,9 +47,26 @@ jobs:
             fi
           }
 
+          # Parse the secrets into arrays
+          IFS=', ' read -r -a EXCLUDE_BRANCHES <<< "${EXCLUDE_BRANCHES}"
+          IFS=', ' read -r -a INCLUDE_BRANCHES <<< "${INCLUDE_BRANCHES}"
+
+          # Fetch branches and process inclusion and exclusion
           git fetch origin
           branches=(${{ steps.fetch_env_branches.outputs.branches }})
+
+          # Add include branches to the list
+          for include_branch in "${INCLUDE_BRANCHES[@]}"; do
+            branches+=("$include_branch")
+          done
+
           for branch in "${branches[@]}"; do
+            # Skip excluded branches
+            if [[ " ${EXCLUDE_BRANCHES[@]} " =~ " ${branch} " ]]; then
+              echo "Skipping branch $branch as it is in the exclusion list."
+              continue
+            fi
+
             check_rate_limit
             echo "Checking if a pull request already exists for $branch"
             existing_pr=$(curl -s -X GET -H "Authorization: Bearer $GITHUB_TOKEN" "https://api.github.com/repos/$GITHUB_REPOSITORY/pulls?head=main&base=$branch")

@@ -20,17 +20,10 @@ jobs:
         id: determine_target_branch
         run: |
           pwd
-          
+
       - name: Merge PR
-        if: github.event.action == 'opened'
-        uses: actions/github-script@v6
-        with:
-          script: |
-            const { owner, repo } = context.repo;
-            const prNumber = context.issue.number;
-            await github.pulls.merge({
-              owner,
-              repo,
-              pull_number: prNumber,
-              merge_method: 'merge'
-            });
+        run: |
+          curl -s -H "Authorization: token ${{ secrets.JOSYS_GITHUB_TOKEN }}" \
+          -X PUT \
+          -d '{"merge_method":"merge"}' \
+          "https://api.github.com/repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/merge"

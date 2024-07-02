@@ -33,9 +33,22 @@ jobs:
       - name: Create or Update Pull Requests to env branches
         id: create_prs
         run: |
+          check_rate_limit() {
+            rate_limit=$(curl -s -H "Authorization: Bearer $GITHUB_TOKEN" "https://api.github.com/rate_limit")
+            remaining=$(echo $rate_limit | jq -r '.rate.remaining')
+            reset=$(echo $rate_limit | jq -r '.rate.reset')
+            if [ "$remaining" -lt 5 ]; then
+              current_time=$(date +%s)
+              wait_time=$((reset - current_time + 10))  # Add 10 seconds buffer
+              echo "Rate limit exceeded. Waiting for $wait_time seconds."
+              sleep $wait_time
+            fi
+          }
+
           git fetch origin
           branches=(${{ steps.fetch_env_branches.outputs.branches }})
           for branch in "${branches[@]}"; do
+            check_rate_limit
             echo "Checking if a pull request already exists for $branch"
             existing_pr=$(curl -s -X GET -H "Authorization: Bearer $GITHUB_TOKEN" "https://api.github.com/repos/$GITHUB_REPOSITORY/pulls?head=main&base=$branch")
             if [[ $(echo "$existing_pr" | jq -r ".[].head.ref") == "main" ]]; then
@@ -44,14 +57,13 @@ jobs:
             else
               echo "Creating pull request from main to $branch"
               pr_url=$(hub pull-request -b $branch -h main -m "PR from main to $branch")
+              sleep 10
             fi
             echo "::set-output name=pr_url::$pr_url"
 
-            # Manage Labels
             pr_number=$(echo $pr_url | awk -F/ '{print $NF}')
             merged_pr_number=${{ github.event.pull_request.number }}
 
-            # Get labels from the merged PR
             labels=$(curl -s -X GET -H "Authorization: Bearer $GITHUB_TOKEN" "https://api.github.com/repos/$GITHUB_REPOSITORY/issues/$merged_pr_number/labels" | jq -r '.[].name')
 
             if [[ -z "$labels" ]]; then
@@ -60,8 +72,11 @@ jobs:
             else
               echo "Transferring labels to the new PR."
               for label in $labels; do
+                check_rate_limit
                 curl -s -X POST -H "Authorization: Bearer $GITHUB_TOKEN" -H "Content-Type: application/json" \
                   --data "{\"labels\":[\"$label\"]}" "https://api.github.com/repos/$GITHUB_REPOSITORY/issues/$pr_number/labels"
+                sleep 2
               done
             fi
+            sleep 5
           done

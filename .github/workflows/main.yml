@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       GITHUB_TOKEN: ${{ secrets.JOSYS_GITHUB_TOKEN }}
-      BRANCHES: ${{ vars.BRANCHES }}
+      BRANCHES: ${{ vars.BRANCHES }} # Reference the environment variable
     steps:
       - name: Checkout the repository
         uses: actions/checkout@v3

@@ -12,8 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       GITHUB_TOKEN: ${{ secrets.JOSYS_GITHUB_TOKEN }}
-      EXCLUDE_BRANCHES: ${{ secrets.EXCLUDE_BRANCHES }}
-      INCLUDE_BRANCHES: ${{ secrets.INCLUDE_BRANCHES }}
+      BRANCHES: ${{ vars.BRANCHES }}
     steps:
       - name: Checkout the repository
         uses: actions/checkout@v3
@@ -47,20 +46,20 @@ jobs:
             fi
           }
 
-          # Parse the secrets into arrays
-          IFS=', ' read -r -a EXCLUDE_BRANCHES <<< "${EXCLUDE_BRANCHES}"
-          IFS=', ' read -r -a INCLUDE_BRANCHES <<< "${INCLUDE_BRANCHES}"
+          # Parse the BRANCHES variable
+          EXCLUDE_BRANCHES=$(echo $BRANCHES | jq -r '.EXCLUDE[]')
+          INCLUDE_BRANCHES=$(echo $BRANCHES | jq -r '.INCLUDE[]')
 
           # Fetch branches and process inclusion and exclusion
           git fetch origin
           branches=(${{ steps.fetch_env_branches.outputs.branches }})
 
           # Add include branches to the list
-          for include_branch in "${INCLUDE_BRANCHES[@]}"; do
+          for include_branch in ${INCLUDE_BRANCHES[@]}; do
             branches+=("$include_branch")
           done
 
-          for branch in "${branches[@]}"; do
+          for branch in ${branches[@]}; do
             # Skip excluded branches
             if [[ " ${EXCLUDE_BRANCHES[@]} " =~ " ${branch} " ]]; then
               echo "Skipping branch $branch as it is in the exclusion list."

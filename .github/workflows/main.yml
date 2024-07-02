@@ -50,6 +50,10 @@ jobs:
           EXCLUDE_BRANCHES=$(echo $BRANCHES | jq -r '.EXCLUDE[]')
           INCLUDE_BRANCHES=$(echo $BRANCHES | jq -r '.INCLUDE[]')
 
+          # Debug output to verify parsing
+          echo "Parsed EXCLUDE_BRANCHES: ${EXCLUDE_BRANCHES[@]}"
+          echo "Parsed INCLUDE_BRANCHES: ${INCLUDE_BRANCHES[@]}"
+
           # Fetch branches and process inclusion and exclusion
           git fetch origin
           branches=(${{ steps.fetch_env_branches.outputs.branches }})

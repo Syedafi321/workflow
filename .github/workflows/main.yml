@@ -45,9 +45,26 @@ jobs:
             fi
           }
 
+          # Define branches to exclude and include
+          EXCLUDE_BRANCHES=("env/file")
+          INCLUDE_BRANCHES=("pr-test")
+
+          # Fetch branches and process inclusion and exclusion
           git fetch origin
           branches=(${{ steps.fetch_env_branches.outputs.branches }})
+
+          # Add include branches to the list
+          for include_branch in "${INCLUDE_BRANCHES[@]}"; do
+            branches+=("$include_branch")
+          done
+
           for branch in "${branches[@]}"; do
+            # Skip excluded branches
+            if [[ " ${EXCLUDE_BRANCHES[@]} " =~ " ${branch} " ]]; then
+              echo "Skipping branch $branch as it is in the exclusion list."
+              continue
+            fi
+
             check_rate_limit
             echo "Checking if a pull request already exists for $branch"
             existing_pr=$(curl -s -X GET -H "Authorization: Bearer $GITHUB_TOKEN" "https://api.github.com/repos/$GITHUB_REPOSITORY/pulls?head=main&base=$branch")

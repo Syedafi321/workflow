@@ -12,6 +12,8 @@ jobs:
     runs-on: ubuntu-latest
     env:
       GITHUB_TOKEN: ${{ secrets.JOSYS_GITHUB_TOKEN }}
+      EXCLUDE_BRANCHES: ${{ vars.EXCLUDE_BRANCHES }}
+      INCLUDE_BRANCHES: ${{ vars.INCLUDE_BRANCHES }}
     steps:
       - name: Checkout the repository
         uses: actions/checkout@v3
@@ -45,9 +47,9 @@ jobs:
             fi
           }
 
-          # Define branches to exclude and include
-          EXCLUDE_BRANCHES=("env/file" "env/test" "env/tag" "env/qay")
-          INCLUDE_BRANCHES=("pr-test" "pr-source")
+          # Parse the environment variables into arrays
+          IFS=',' read -r -a EXCLUDE_BRANCHES <<< "$EXCLUDE_BRANCHES"
+          IFS=',' read -r -a INCLUDE_BRANCHES <<< "$INCLUDE_BRANCHES"
 
           # Fetch branches and process inclusion and exclusion
           git fetch origin

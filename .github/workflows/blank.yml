@@ -13,4 +13,4 @@ jobs:
     - uses: actions/checkout@v3
     - name: Run on specific self-hosted runner
       run: |
-        echo "Running on self-hosted runner with label
+        echo "Running on self-hosted runner with label"

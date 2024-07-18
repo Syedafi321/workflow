@@ -15,26 +15,109 @@ jobs:
       EXCLUDE_BRANCHES: ${{ vars.EXCLUDE_BRANCHES }}
       INCLUDE_BRANCHES: ${{ vars.INCLUDE_BRANCHES }}
       SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+      
     steps:
-      # ... (previous steps remain the same)
+      - name: Checkout the repository
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.JOSYS_GITHUB_TOKEN }}
+
+      - name: Install Hub CLI
+        run: |
+          sudo snap install hub --classic
+
+      - name: Fetch env branches
+        id: fetch_env_branches
+        run: |
+          git fetch --all
+          branches=$(git branch -r | grep 'origin/env/' | sed 's|origin/||')
+          echo "::set-output name=branches::$(echo $branches | tr '\n' ' ')"
 
       - name: Create or Update Pull Requests to env branches
         id: create_prs
         run: |
-          # ... (previous content of this step remains the same)
+          check_rate_limit() {
+            rate_limit=$(curl -s -H "Authorization: Bearer $GITHUB_TOKEN" "https://api.github.com/rate_limit")
+            remaining=$(echo $rate_limit | jq -r '.rate.remaining')
+            reset=$(echo $rate_limit | jq -r '.rate.reset')
+            if [ "$remaining" -lt 5 ]; then
+              current_time=$(date +%s)
+              wait_time=$((reset - current_time + 10))  # Add 10 seconds buffer
+              echo "Rate limit exceeded. Waiting for $wait_time seconds."
+              sleep $wait_time
+            fi
+          }
 
-          # Add this at the end of the step
-          echo "pr_summary<<EOF" >> $GITHUB_OUTPUT
+          # Parse the environment variables into arrays
+          if [ "$EXCLUDE_BRANCHES" != "null" ]; then
+            IFS=',' read -r -a EXCLUDE_BRANCHES <<< "$EXCLUDE_BRANCHES"
+          else
+            EXCLUDE_BRANCHES=()
+          fi
+
+          if [ "$INCLUDE_BRANCHES" != "null" ]; then
+            IFS=',' read -r -a INCLUDE_BRANCHES <<< "$INCLUDE_BRANCHES"
+          else
+            INCLUDE_BRANCHES=()
+          fi
+
+          # Fetch branches and process inclusion and exclusion
+          git fetch origin
+          branches=(${{ steps.fetch_env_branches.outputs.branches }})
+
+          # Add include branches to the list if not null
+          if [ "${#INCLUDE_BRANCHES[@]}" -ne 0 ]; then
+            for include_branch in "${INCLUDE_BRANCHES[@]}"; do
+              branches+=("$include_branch")
+            done
+          fi
+
           for branch in "${branches[@]}"; do
+            # Skip excluded branches if not null
             if [[ " ${EXCLUDE_BRANCHES[@]} " =~ " ${branch} " ]]; then
+              echo "Skipping branch $branch as it is in the exclusion list."
               continue
             fi
-            pr_url=$(echo "::set-output name=pr_url::$pr_url" | awk -F'::' '{print $3}')
+
+            check_rate_limit
+            echo "Checking if a pull request already exists for $branch"
+            existing_pr=$(curl -s -X GET -H "Authorization: Bearer $GITHUB_TOKEN" "https://api.github.com/repos/$GITHUB_REPOSITORY/pulls?head=main&base=$branch")
+            if [[ $(echo "$existing_pr" | jq -r ".[].head.ref") == "main" ]]; then
+              echo "A pull request already exists from main to $branch."
+              pr_url=$(echo "$existing_pr" | jq -r ".[0].html_url")
+            else
+              echo "Creating pull request from main to $branch"
+              pr_url=$(hub pull-request -b $branch -h main -m "PR from main to $branch")
+              sleep 10
+            fi
+            echo "::set-output name=pr_url::$pr_url"
+
             pr_number=$(echo $pr_url | awk -F/ '{print $NF}')
+            merged_pr_number=${{ github.event.pull_request.number }}
+
+            labels=$(curl -s -X GET -H "Authorization: Bearer $GITHUB_TOKEN" "https://api.github.com/repos/$GITHUB_REPOSITORY/issues/$merged_pr_number/labels" | jq -r '.[].name')
+
+            if [[ -z "$labels" ]]; then
+              echo "No labels found on the merged PR. Removing labels from the new PR."
+              curl -s -X DELETE -H "Authorization: Bearer $GITHUB_TOKEN" "https://api.github.com/repos/$GITHUB_REPOSITORY/issues/$pr_number/labels"
+            else
+              echo "Transferring labels to the new PR."
+              for label in $labels; do
+                check_rate_limit
+                curl -s -X POST -H "Authorization: Bearer $GITHUB_TOKEN" -H "Content-Type: application/json" \
+                  --data "{\"labels\":[\"$label\"]}" "https://api.github.com/repos/$GITHUB_REPOSITORY/issues/$pr_number/labels"
+                sleep 2
+              done
+            fi
+            sleep 5
+          done
             merge_status=$(curl -s -X GET -H "Authorization: Bearer $GITHUB_TOKEN" \
               "https://api.github.com/repos/$GITHUB_REPOSITORY/pulls/$pr_number" | \
               jq -r '.mergeable_state')
             echo "$branch|$pr_url|$merge_status" >> $GITHUB_OUTPUT
+
+            sleep 5
           done
           echo "EOF" >> $GITHUB_OUTPUT
 

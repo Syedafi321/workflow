@@ -15,6 +15,7 @@ jobs:
       EXCLUDE_BRANCHES: ${{ vars.EXCLUDE_BRANCHES }}
       INCLUDE_BRANCHES: ${{ vars.INCLUDE_BRANCHES }}
       SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+      
     steps:
       - name: Checkout the repository
         uses: actions/checkout@v3
@@ -72,7 +73,6 @@ jobs:
             done
           fi
 
-          echo "pr_summary<<EOF" >> $GITHUB_OUTPUT
           for branch in "${branches[@]}"; do
             # Skip excluded branches if not null
             if [[ " ${EXCLUDE_BRANCHES[@]} " =~ " ${branch} " ]]; then
@@ -91,6 +91,7 @@ jobs:
               pr_url=$(hub pull-request -b $branch -h main -m "PR from main to $branch")
               sleep 10
             fi
+            echo "::set-output name=pr_url::$pr_url"
 
             pr_number=$(echo $pr_url | awk -F/ '{print $NF}')
             merged_pr_number=${{ github.event.pull_request.number }}
@@ -109,7 +110,8 @@ jobs:
                 sleep 2
               done
             fi
-
+            sleep 5
+          done
             merge_status=$(curl -s -X GET -H "Authorization: Bearer $GITHUB_TOKEN" \
               "https://api.github.com/repos/$GITHUB_REPOSITORY/pulls/$pr_number" | \
               jq -r '.mergeable_state')

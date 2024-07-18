@@ -48,38 +48,34 @@ jobs:
               sleep $wait_time
             fi
           }
-
           # Parse the environment variables into arrays
           if [ "$EXCLUDE_BRANCHES" != "null" ]; then
             IFS=',' read -r -a EXCLUDE_BRANCHES <<< "$EXCLUDE_BRANCHES"
           else
             EXCLUDE_BRANCHES=()
           fi
-
           if [ "$INCLUDE_BRANCHES" != "null" ]; then
             IFS=',' read -r -a INCLUDE_BRANCHES <<< "$INCLUDE_BRANCHES"
           else
             INCLUDE_BRANCHES=()
           fi
-
           # Fetch branches and process inclusion and exclusion
           git fetch origin
           branches=(${{ steps.fetch_env_branches.outputs.branches }})
-
           # Add include branches to the list if not null
           if [ "${#INCLUDE_BRANCHES[@]}" -ne 0 ]; then
             for include_branch in "${INCLUDE_BRANCHES[@]}"; do
               branches+=("$include_branch")
             done
           fi
-
+          
+          echo "pr_summary<<EOF" >> $GITHUB_OUTPUT
           for branch in "${branches[@]}"; do
             # Skip excluded branches if not null
             if [[ " ${EXCLUDE_BRANCHES[@]} " =~ " ${branch} " ]]; then
               echo "Skipping branch $branch as it is in the exclusion list."
               continue
             fi
-
             check_rate_limit
             echo "Checking if a pull request already exists for $branch"
             existing_pr=$(curl -s -X GET -H "Authorization: Bearer $GITHUB_TOKEN" "https://api.github.com/repos/$GITHUB_REPOSITORY/pulls?head=main&base=$branch")
@@ -91,13 +87,9 @@ jobs:
               pr_url=$(hub pull-request -b $branch -h main -m "PR from main to $branch")
               sleep 10
             fi
-            echo "::set-output name=pr_url::$pr_url"
-
             pr_number=$(echo $pr_url | awk -F/ '{print $NF}')
             merged_pr_number=${{ github.event.pull_request.number }}
-
             labels=$(curl -s -X GET -H "Authorization: Bearer $GITHUB_TOKEN" "https://api.github.com/repos/$GITHUB_REPOSITORY/issues/$merged_pr_number/labels" | jq -r '.[].name')
-
             if [[ -z "$labels" ]]; then
               echo "No labels found on the merged PR. Removing labels from the new PR."
               curl -s -X DELETE -H "Authorization: Bearer $GITHUB_TOKEN" "https://api.github.com/repos/$GITHUB_REPOSITORY/issues/$pr_number/labels"
@@ -110,13 +102,10 @@ jobs:
                 sleep 2
               done
             fi
-            sleep 5
-          done
             merge_status=$(curl -s -X GET -H "Authorization: Bearer $GITHUB_TOKEN" \
               "https://api.github.com/repos/$GITHUB_REPOSITORY/pulls/$pr_number" | \
               jq -r '.mergeable_state')
             echo "$branch|$pr_url|$merge_status" >> $GITHUB_OUTPUT
-
             sleep 5
           done
           echo "EOF" >> $GITHUB_OUTPUT

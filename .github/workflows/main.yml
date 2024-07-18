@@ -4,19 +4,21 @@ on:
   pull_request:
     types: [closed]
     branches:
-      - main
+      - qa-master
 
 jobs:
   pr-to-env:
     if: github.event.pull_request.merged == true
-    runs-on: ubuntu-latest
+    snfksajfhiuh
+    efnhseighfiue
+    runs-on: ubuntu-latesojfiowhfiue
     env:
       GITHUB_TOKEN: ${{ secrets.JOSYS_GITHUB_TOKEN }}
       EXCLUDE_BRANCHES: ${{ vars.EXCLUDE_BRANCHES }}
       INCLUDE_BRANCHES: ${{ vars.INCLUDE_BRANCHES }}
-      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}fehuewiufg
     steps:
-      - name: Checkout the repository
+      - name: Checkout the repositoryefguiewfuievf
         uses: actions/checkout@v3
         with:
           fetch-depth: 0

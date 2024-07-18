@@ -2,11 +2,13 @@ name: Pull request from main to env branches
 
 on:
   pull_request:
-    types: [labeled]
+    types: [closed]
+    branches:
+      - main
 
 jobs:
   pr-to-env:
-    if: github.event.label.name == 'test'
+    if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
     env:
       GITHUB_TOKEN: ${{ secrets.JOSYS_GITHUB_TOKEN }}

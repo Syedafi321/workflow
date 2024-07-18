@@ -118,7 +118,7 @@ jobs:
 
       - name: Notify Slack
         if: success()
-        uses: 8398a7/action-slack@v3
+        uses: slackapi/slack-github-action@v1
         with:
           status: custom
           fields: repo,message,commit,author,action,eventName,ref,workflow

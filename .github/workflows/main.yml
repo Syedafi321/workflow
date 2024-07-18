@@ -122,15 +122,9 @@ jobs:
         with:
           status: custom
           fields: repo,message,commit,author,action,eventName,ref,workflow
-          custom_payload: |
+          payload: |
             {
-              "text": "Pull Requests created/updated from main to env branches:",
-              "attachments": [
-                {
-                  "color": "good",
-                  "text": "${{ steps.create_prs.outputs.pr_summary }}"
-                }
-              ]
+              "text": "${{ steps.create_prs.outputs.pr_summary }}"
             }
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}

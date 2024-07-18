@@ -32,7 +32,7 @@ jobs:
         run: |
           git fetch --all
           branches=$(git branch -r | grep 'origin/env/' | sed 's|origin/||')
-          echo "::set-output name=branches::$(echo $branches | tr '\n' ' ')"
+          echo "branches=$(echo $branches | tr '\n' ' ')" >> $GITHUB_OUTPUT
 
       - name: Create or Update Pull Requests to env branches
         id: create_prs
@@ -88,8 +88,19 @@ jobs:
               sleep 10
             fi
             pr_number=$(echo $pr_url | awk -F/ '{print $NF}')
-            merged_pr_number=${{ github.event.pull_request.number }}
-            labels=$(curl -s -X GET -H "Authorization: Bearer $GITHUB_TOKEN" "https://api.github.com/repos/$GITHUB_REPOSITORY/issues/$merged_pr_number/labels" | jq -r '.[].name')
+            
+            # Check if PR can be merged
+            pr_info=$(curl -s -X GET -H "Authorization: Bearer $GITHUB_TOKEN" "https://api.github.com/repos/$GITHUB_REPOSITORY/pulls/$pr_number")
+            mergeable=$(echo "$pr_info" | jq -r '.mergeable')
+            if [ "$mergeable" = "true" ]; then
+              merge_status="Can be merged"
+            else
+              merge_status="Has conflicts"
+            fi
+            
+            echo "$branch: $pr_url ($merge_status)" >> $GITHUB_OUTPUT
+            
+            labels=$(curl -s -X GET -H "Authorization: Bearer $GITHUB_TOKEN" "https://api.github.com/repos/$GITHUB_REPOSITORY/issues/${{ github.event.pull_request.number }}/labels" | jq -r '.[].name')
             if [[ -z "$labels" ]]; then
               echo "No labels found on the merged PR. Removing labels from the new PR."
               curl -s -X DELETE -H "Authorization: Bearer $GITHUB_TOKEN" "https://api.github.com/repos/$GITHUB_REPOSITORY/issues/$pr_number/labels"
@@ -102,72 +113,24 @@ jobs:
                 sleep 2
               done
             fi
-            merge_status=$(curl -s -X GET -H "Authorization: Bearer $GITHUB_TOKEN" \
-              "https://api.github.com/repos/$GITHUB_REPOSITORY/pulls/$pr_number" | \
-              jq -r '.mergeable_state')
-            echo "$branch|$pr_url|$merge_status" >> $GITHUB_OUTPUT
-            sleep 5
           done
           echo "EOF" >> $GITHUB_OUTPUT
 
-      - name: Check PR merge status and prepare summary
-        id: pr_summary
-        run: |
-          echo "${{ steps.create_prs.outputs.pr_summary }}" > pr_summary.txt
-          mergeable_prs=$(grep -c "|clean$" pr_summary.txt)
-          conflicting_prs=$(grep -c "|dirty$" pr_summary.txt)
-          echo "mergeable_prs=$mergeable_prs" >> $GITHUB_OUTPUT
-          echo "conflicting_prs=$conflicting_prs" >> $GITHUB_OUTPUT
-
-      - name: Send Slack notification
-        if: always()
-        run: |
-          summary=$(cat pr_summary.txt)
-          IFS=$'\n'
-          rows=""
-          for line in $summary; do
-            IFS='|' read -r branch url status <<< "$line"
-            rows="$rows
+      - name: Notify Slack
+        if: success()
+        uses: 8398a7/action-slack@v3
+        with:
+          status: custom
+          fields: repo,message,commit,author,action,eventName,ref,workflow
+          custom_payload: |
             {
-              \"type\": \"section\",
-              \"fields\": [
-                {\"type\": \"mrkdwn\", \"text\": \"*Branch:*\n$branch\"},
-                {\"type\": \"mrkdwn\", \"text\": \"*Status:*\n$status\"},
-                {\"type\": \"mrkdwn\", \"text\": \"*PR URL:*\n$url\"}
-              ]
-            },"
-          done
-          
-          payload=$(cat <<EOF
-          {
-            "blocks": [
-              {
-                "type": "header",
-                "text": {
-                  "type": "plain_text",
-                  "text": "Pull Request Summary",
-                  "emoji": true
+              "text": "Pull Requests created/updated from main to env branches:",
+              "attachments": [
+                {
+                  "color": "good",
+                  "text": "${{ steps.create_prs.outputs.pr_summary }}"
                 }
-              },
-              {
-                "type": "section",
-                "fields": [
-                  {
-                    "type": "mrkdwn",
-                    "text": "*Mergeable PRs:*\n${{ steps.pr_summary.outputs.mergeable_prs }}"
-                  },
-                  {
-                    "type": "mrkdwn",
-                    "text": "*Conflicting PRs:*\n${{ steps.pr_summary.outputs.conflicting_prs }}"
-                  }
-                ]
-              },
-              {
-                "type": "divider"
-              },
-              ${rows%,}
-            ]
-          }
-          EOF
-          )
-          curl -X POST -H 'Content-type: application/json' --data "$payload" $SLACK_WEBHOOK
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}

@@ -116,18 +116,26 @@ jobs:
             sleep 5
           done
 
+      - name: Send Slack notification
+        run: |
           echo "Sending Slack notification"
           pr_messages=""
           for pr in "${pr_details[@]}"; do
-            mergeable=$(curl -s -H "Authorization: Bearer $GITHUB_TOKEN" "https://api.github.com/repos/$GITHUB_REPOSITORY/pulls/$(echo $pr | awk -F/ '{print $NF}')" | jq -r '.mergeable')
-            if [ "$mergeable" == "true" ]; then
-              pr_messages+="$pr: Can be merged\n"
+            pr_number=$(echo $pr | awk -F/ '{print $NF}')
+            pr_data=$(curl -s -H "Authorization: Bearer $GITHUB_TOKEN" "https://api.github.com/repos/$GITHUB_REPOSITORY/pulls/$pr_number")
+            base_branch=$(echo $pr_data | jq -r '.base.ref')
+            head_branch=$(echo $pr_data | jq -r '.head.ref')
+            mergeable=$(echo $pr_data | jq -r '.mergeable')
+            
+            if [[ "$mergeable" == "true" ]]; then
+              pr_messages+="$base_branch branch can be merged from $head_branch branch\n"
             else
-              pr_messages+="$pr: Has merge conflicts\n"
+              pr_messages+="$base_branch branch cannot be merged from $head_branch branch due to merge conflicts\n"
             fi
           done
-
+      
           payload="{
             \"text\": \"Created Pull Requests:\n$pr_messages\"
           }"
           curl -X POST -H 'Content-type: application/json' --data "$payload" $SLACK_WEBHOOK_URL
+

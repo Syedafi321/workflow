@@ -1,4 +1,4 @@
-name: Pull request from main to env branches
+name: Pull request from main to env branches-1
 
 on:
   pull_request:
@@ -120,11 +120,9 @@ jobs:
         if: success()
         uses: slackapi/slack-github-action@v1
         with:
-          status: custom
-          fields: repo,message,commit,author,action,eventName,ref,workflow
           payload: |
             {
-              "text": "${{ steps.create_prs.outputs.pr_summary }}"
+              "text": "Pull Request Summary:\n${{ steps.create_prs.outputs.pr_summary }}"
             }
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}

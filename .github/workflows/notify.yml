@@ -1,9 +1,9 @@
-name: Daily Pull Request Report
+# name: Daily Pull Request Report
 
-on:
-  workflow_dispatch:
-  schedule:
-    - cron: '05 04 * * *' 
+# on:
+#   workflow_dispatch:
+#   schedule:
+#     - cron: '05 04 * * *' 
 
 
 jobs:

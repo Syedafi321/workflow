@@ -14,6 +14,7 @@ jobs:
       GITHUB_TOKEN: ${{ secrets.JOSYS_GITHUB_TOKEN }}
       EXCLUDE_BRANCHES: ${{ vars.EXCLUDE_BRANCHES }}
       INCLUDE_BRANCHES: ${{ vars.INCLUDE_BRANCHES }}
+      SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
     steps:
       - name: Checkout the repository
         uses: actions/checkout@v3
@@ -71,6 +72,7 @@ jobs:
             done
           fi
 
+          summary=""
           for branch in "${branches[@]}"; do
             # Skip excluded branches if not null
             if [[ " ${EXCLUDE_BRANCHES[@]} " =~ " ${branch} " ]]; then
@@ -84,14 +86,29 @@ jobs:
             if [[ $(echo "$existing_pr" | jq -r ".[].head.ref") == "main" ]]; then
               echo "A pull request already exists from main to $branch."
               pr_url=$(echo "$existing_pr" | jq -r ".[0].html_url")
+              pr_number=$(echo "$existing_pr" | jq -r ".[0].number")
             else
               echo "Creating pull request from main to $branch"
               pr_url=$(hub pull-request -b $branch -h main -m "PR from main to $branch")
+              pr_number=$(echo $pr_url | awk -F/ '{print $NF}')
               sleep 10
             fi
-            echo "::set-output name=pr_url::$pr_url"
 
-            pr_number=$(echo $pr_url | awk -F/ '{print $NF}')
+            # Check if PR can be merged
+            check_rate_limit
+            pr_info=$(curl -s -X GET -H "Authorization: Bearer $GITHUB_TOKEN" "https://api.github.com/repos/$GITHUB_REPOSITORY/pulls/$pr_number")
+            mergeable=$(echo "$pr_info" | jq -r '.mergeable')
+
+            if [ "$mergeable" == "true" ]; then
+              status="Can be merged"
+            elif [ "$mergeable" == "false" ]; then
+              status="Has merge conflicts"
+            else
+              status="Merge status unknown"
+            fi
+
+            summary="${summary}- <$pr_url|PR #$pr_number> (${branch}): $status\n"
+
             merged_pr_number=${{ github.event.pull_request.number }}
 
             labels=$(curl -s -X GET -H "Authorization: Bearer $GITHUB_TOKEN" "https://api.github.com/repos/$GITHUB_REPOSITORY/issues/$merged_pr_number/labels" | jq -r '.[].name')
@@ -110,3 +127,6 @@ jobs:
             fi
             sleep 5
           done
+
+          # Send summary to Slack
+          curl -X POST -H 'Content-type: application/json' --data "{\"text\":\"Summary of PRs created:\n$summary\"}" $SLACK_WEBHOOK

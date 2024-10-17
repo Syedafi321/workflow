@@ -1,0 +1,116 @@
+name: Selective Folder Merge and Auto-Merge
+
+on:
+  pull_request:
+    branches: [ main ]
+    types: [ opened, synchronize ]
+
+jobs:
+  selective-merge-and-auto-merge:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+      with:
+        fetch-depth: 0
+
+    - name: Set up Git
+      run: |
+        git config user.name github-actions
+        git config user.email github-actions@github.com
+
+    - name: Create filtered branch
+      run: |
+        # Fetch the source branch
+        git fetch origin ${{ github.head_ref }}
+        
+        # Create a new branch from the PR's source branch
+        git checkout -b filtered-branch origin/${{ github.head_ref }}
+        
+        # Set up sparse checkout
+        git sparse-checkout set dev prod qa
+        
+        # Stage changes in specified folders
+        git add dev prod qa
+        
+        # Commit changes if there are any
+        git diff --staged --quiet || git commit -m "Filtered changes from ${{ github.head_ref }} branch"
+        
+        # Push the new branch
+        git push origin filtered-branch
+      continue-on-error: true
+
+    - name: Check if filtered branch was created
+      id: check_branch
+      run: |
+        if git ls-remote --exit-code --heads origin filtered-branch; then
+          echo "filtered_branch_exists=true" >> $GITHUB_OUTPUT
+        else
+          echo "filtered_branch_exists=false" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Update PR
+      if: steps.check_branch.outputs.filtered_branch_exists == 'true'
+      run: |
+        gh pr edit ${{ github.event.pull_request.number }} --base main --head filtered-branch
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Comment on PR success
+      if: steps.check_branch.outputs.filtered_branch_exists == 'true'
+      uses: actions/github-script@v6
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        script: |
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.name,
+            body: 'This PR has been automatically updated to include only changes from the dev, prod, and qa folders.'
+          })
+
+    - name: Comment on PR failure
+      if: steps.check_branch.outputs.filtered_branch_exists == 'false'
+      uses: actions/github-script@v6
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        script: |
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.name,
+            body: 'Failed to create filtered branch. There might be no changes in dev, prod, or qa folders, or an error occurred.'
+          })
+
+    - name: Auto-merge PR
+      if: steps.check_branch.outputs.filtered_branch_exists == 'true'
+      run: |
+        gh pr merge ${{ github.event.pull_request.number }} --auto --merge
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Comment on successful merge
+      if: success() && steps.check_branch.outputs.filtered_branch_exists == 'true'
+      uses: actions/github-script@v6
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        script: |
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.name,
+            body: 'The filtered changes have been automatically merged into the main branch.'
+          })
+
+    - name: Comment on merge failure
+      if: failure() && steps.check_branch.outputs.filtered_branch_exists == 'true'
+      uses: actions/github-script@v6
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        script: |
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.name,
+            body: 'Automatic merge failed. Please resolve any conflicts and try again.'
+          })

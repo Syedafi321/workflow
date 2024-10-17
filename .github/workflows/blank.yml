@@ -1,17 +1,17 @@
-name: Manual Workflow with Self-Hosted Runner
+# name: Manual Workflow with Self-Hosted Runner
 
-on:
-  workflow_dispatch:
+# on:
+#   workflow_dispatch:
 
-jobs:
-  build:
-    runs-on: self-hosted
-    env:
-      RUNNER_LABEL: ip-172-31-38-105
+# jobs:
+#   build:
+#     runs-on: self-hosted
+#     env:
+#       RUNNER_LABEL: ip-172-31-38-105
 
-    steps:
-    - uses: actions/checkout@v3
-    - name: Run on specific self-hosted runner
-      run: |
-        echo "Running on self-hosted runner with label"
+#     steps:
+#     - uses: actions/checkout@v3
+#     - name: Run on specific self-hosted runner
+#       run: |
+#         echo "Running on self-hosted runner with label"
 

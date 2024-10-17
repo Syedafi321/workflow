@@ -1,124 +1,128 @@
-name: Pull request from main to env branches-4
+# name: Pull request from main to env branches-4
 
-on:
-  pull_request:
-    types: [closed]
-    branches:
-      - main
+# on:
+#   pull_request:
+#     types: [closed]
+#     branches:
+#       - main
 
-jobs:
-  pr-to-env:
-    if: github.event.pull_request.merged == true
-    runs-on: ubuntu-latest
-    env:
-      GITHUB_TOKEN: ${{ secrets.JOSYS_GITHUB_TOKEN }}
-      EXCLUDE_BRANCHES: ${{ vars.EXCLUDE_BRANCHES }}
-      INCLUDE_BRANCHES: ${{ vars.INCLUDE_BRANCHES }}
-      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
-    steps:
-      - name: Checkout the repository
-        uses: actions/checkout@v3
-        with:
-          fetch-depth: 0
-          token: ${{ secrets.JOSYS_GITHUB_TOKEN }}
+# jobs:
+#   pr-to-env:
+#     if: github.event.pull_request.merged == true
+#     runs-on: ubuntu-latest
+#     env:
+#       GITHUB_TOKEN: ${{ secrets.JOSYS_GITHUB_TOKEN }}
+#       EXCLUDE_BRANCHES: ${{ vars.EXCLUDE_BRANCHES }}
+#       INCLUDE_BRANCHES: ${{ vars.INCLUDE_BRANCHES }}
+#       SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
+#     steps:
+#       - name: Checkout the repository
+#         uses: actions/checkout@v3
+#         with:
+#           fetch-depth: 0
+#           token: ${{ secrets.JOSYS_GITHUB_TOKEN }}
 
-      - name: Install Hub CLI
-        run: |
-          sudo snap install hub --classic
-      - name: Fetch env branches
-        id: fetch_env_branches
-        run: |
-          git fetch --all
-          branches=$(git branch -r | grep 'origin/env/' | sed 's|origin/||')
-          echo "::set-output name=branches::$(echo $branches | tr '\n' ' ')"
-      - name: Create or Update Pull Requests to env branches
-        id: create_prs
-        run: |
-          check_rate_limit() {
-            rate_limit=$(curl -s -H "Authorization: Bearer $GITHUB_TOKEN" "https://api.github.com/rate_limit")
-            remaining=$(echo $rate_limit | jq -r '.rate.remaining')
-            reset=$(echo $rate_limit | jq -r '.rate.reset')
-            if [ "$remaining" -lt 5 ]; then
-              current_time=$(date +%s)
-              wait_time=$((reset - current_time + 10))  # Add 10 seconds buffer
-              echo "Rate limit exceeded. Waiting for $wait_time seconds."
-              sleep $wait_time
-            fi
-          }
-          # Parse the environment variables into arrays
-          if [ "$EXCLUDE_BRANCHES" != "null" ]; then
-            IFS=',' read -r -a EXCLUDE_BRANCHES <<< "$EXCLUDE_BRANCHES"
-          else
-            EXCLUDE_BRANCHES=()
-          fi
-          if [ "$INCLUDE_BRANCHES" != "null" ]; then
-            IFS=',' read -r -a INCLUDE_BRANCHES <<< "$INCLUDE_BRANCHES"
-          else
-            INCLUDE_BRANCHES=()
-          fi
-          # Fetch branches and process inclusion and exclusion
-          git fetch origin
-          branches=(${{ steps.fetch_env_branches.outputs.branches }})
-          # Add include branches to the list if not null
-          if [ "${#INCLUDE_BRANCHES[@]}" -ne 0 ]; then
-            for include_branch in "${INCLUDE_BRANCHES[@]}"; do
-              branches+=("$include_branch")
-            done
-          fi
-          pr_details=()
-          for branch in "${branches[@]}"; do
-            # Skip excluded branches if not null
-            if [[ " ${EXCLUDE_BRANCHES[@]} " =~ " ${branch} " ]]; then
-              echo "Skipping branch $branch as it is in the exclusion list."
-              continue
-            fi
-            check_rate_limit
-            echo "Checking if a pull request already exists for $branch"
-            existing_pr=$(curl -s -X GET -H "Authorization: Bearer $GITHUB_TOKEN" "https://api.github.com/repos/$GITHUB_REPOSITORY/pulls?head=main&base=$branch")
-            if [[ $(echo "$existing_pr" | jq -r ".[].head.ref") == "main" ]]; then
-              echo "A pull request already exists from main to $branch."
-              pr_url=$(echo "$existing_pr" | jq -r ".[0].html_url")
-            else
-              echo "Creating pull request from main to $branch"
-              pr_url=$(hub pull-request -b $branch -h main -m "PR from main to $branch")
-              sleep 10
-            fi
-            echo "::set-output name=pr_url::$pr_url"
-            pr_number=$(echo $pr_url | awk -F/ '{print $NF}')
-            merged_pr_number=${{ github.event.pull_request.number }}
-            labels=$(curl -s -X GET -H "Authorization: Bearer $GITHUB_TOKEN" "https://api.github.com/repos/$GITHUB_REPOSITORY/issues/$merged_pr_number/labels" | jq -r '.[].name')
-            if [[ -z "$labels" ]]; then
-              echo "No labels found on the merged PR. Removing labels from the new PR."
-              curl -s -X DELETE -H "Authorization: Bearer $GITHUB_TOKEN" "https://api.github.com/repos/$GITHUB_REPOSITORY/issues/$pr_number/labels"
-            else
-              echo "Transferring labels to the new PR."
-              for label in $labels; do
-                check_rate_limit
-                curl -s -X POST -H "Authorization: Bearer $GITHUB_TOKEN" -H "Content-Type: application/json" \
-                  --data "{\"labels\":[\"$label\"]}" "https://api.github.com/repos/$GITHUB_REPOSITORY/issues/$pr_number/labels"
-                sleep 2
-              done
-            fi
-            pr_details+=("$pr_url")
-            sleep 5
-          done
-          echo "Sending Slack notification"
-          pr_messages="| Pull Request URL | Base Branch | Mergeable | Status |\n|-----------------|--------------|-----------|--------|"
-          for pr in "${pr_details[@]}"; do
-            pr_number=$(echo $pr | awk -F/ '{print $NF}')
-            pr_info=$(curl -s -H "Authorization: Bearer $GITHUB_TOKEN" "https://api.github.com/repos/$GITHUB_REPOSITORY/pulls/$pr_number")
-            mergeable=$(echo "$pr_info" | jq -r '.mergeable')
-            base_branch=$(echo "$pr_info" | jq -r '.base.ref')
-            head_branch=$(echo "$pr_info" | jq -r '.head.ref')
-            
-            if [ "$mergeable" == "true" ]; then
-              pr_messages+="\n| <$pr|PR #$pr_number> | $base_branch | $mergeable | Can be merged |"
-            else
-              pr_messages+="\n| <$pr|PR #$pr_number> | $base_branch | $mergeable | Merge conflicts |"
-            fi
-          done
-          
-          payload="{
-            \"text\": \"Created Pull Requests:\n$pr_messages\"
-          }"
-          curl -X POST -H 'Content-type: application/json' --data "$payload" $SLACK_WEBHOOK_URL
+#       - name: Install Hub CLI
+#         run: |
+#           sudo snap install hub --classic
+
+#       - name: Fetch env branches
+#         id: fetch_env_branches
+#         run: |
+#           git fetch --all
+#           branches=$(git branch -r | grep 'origin/env/' | sed 's|origin/||')
+#           echo "::set-output name=branches::$(echo $branches | tr '\n' ' ')"
+
+#       - name: Create or Update Pull Requests to env branches
+#         id: create_prs
+#         run: |
+#           check_rate_limit() {
+#             rate_limit=$(curl -s -H "Authorization: Bearer $GITHUB_TOKEN" "https://api.github.com/rate_limit")
+#             remaining=$(echo $rate_limit | jq -r '.rate.remaining')
+#             reset=$(echo $rate_limit | jq -r '.rate.reset')
+#             if [ "$remaining" -lt 5 ]; then
+#               current_time=$(date +%s)
+#               wait_time=$((reset - current_time + 10))  # Add 10 seconds buffer
+#               echo "Rate limit exceeded. Waiting for $wait_time seconds."
+#               sleep $wait_time
+#             fi
+#           }
+
+#           if [ "$EXCLUDE_BRANCHES" != "null" ]; then
+#             IFS=',' read -r -a EXCLUDE_BRANCHES <<< "$EXCLUDE_BRANCHES"
+#           else
+#             EXCLUDE_BRANCHES=()
+#           fi
+
+#           if [ "$INCLUDE_BRANCHES" != "null" ]; then
+#             IFS=',' read -r -a INCLUDE_BRANCHES <<< "$INCLUDE_BRANCHES"
+#           else
+#             INCLUDE_BRANCHES=()
+#           fi
+
+#           git fetch origin
+#           branches=(${{ steps.fetch_env_branches.outputs.branches }})
+
+#           if [ "${#INCLUDE_BRANCHES[@]}" -ne 0 ]; then
+#             for include_branch in "${INCLUDE_BRANCHES[@]}"; do
+#               branches+=("$include_branch")
+#             done
+#           fi
+
+#           pr_details=()
+#           for branch in "${branches[@]}"; do
+#             if [[ " ${EXCLUDE_BRANCHES[@]} " =~ " ${branch} " ]]; then
+#               echo "Skipping branch $branch as it is in the exclusion list."
+#               continue
+#             fi
+#             check_rate_limit
+#             echo "Checking if a pull request already exists for $branch"
+#             existing_pr=$(curl -s -X GET -H "Authorization: Bearer $GITHUB_TOKEN" "https://api.github.com/repos/$GITHUB_REPOSITORY/pulls?head=main&base=$branch")
+#             if [[ $(echo "$existing_pr" | jq -r ".[].head.ref") == "main" ]]; then
+#               echo "A pull request already exists from main to $branch."
+#               pr_url=$(echo "$existing_pr" | jq -r ".[0].html_url")
+#             else
+#               echo "Creating pull request from main to $branch"
+#               pr_url=$(hub pull-request -b $branch -h main -m "PR from main to $branch")
+#               sleep 10
+#             fi
+#             echo "::set-output name=pr_url::$pr_url"
+#             pr_number=$(echo $pr_url | awk -F/ '{print $NF}')
+#             merged_pr_number=${{ github.event.pull_request.number }}
+#             labels=$(curl -s -X GET -H "Authorization: Bearer $GITHUB_TOKEN" "https://api.github.com/repos/$GITHUB_REPOSITORY/issues/$merged_pr_number/labels" | jq -r '.[].name')
+#             if [[ -z "$labels" ]]; then
+#               echo "No labels found on the merged PR. Removing labels from the new PR."
+#               curl -s -X DELETE -H "Authorization: Bearer $GITHUB_TOKEN" "https://api.github.com/repos/$GITHUB_REPOSITORY/issues/$pr_number/labels"
+#             else
+#               echo "Transferring labels to the new PR."
+#               for label in $labels; do
+#                 check_rate_limit
+#                 curl -s -X POST -H "Authorization: Bearer $GITHUB_TOKEN" -H "Content-Type: application/json" \
+#                   --data "{\"labels\":[\"$label\"]}" "https://api.github.com/repos/$GITHUB_REPOSITORY/issues/$pr_number/labels"
+#                 sleep 2
+#               done
+#             fi
+#             pr_details+=("$pr_url|$branch")
+#             sleep 5
+#           done
+
+#           echo "Sending Slack notification"
+#           mergeable_prs="Mergeable PRs:\n"
+#           conflicts_prs="Conflicts PRs:\n"
+#           for pr_detail in "${pr_details[@]}"; do
+#             pr_url=$(echo $pr_detail | cut -d'|' -f1)
+#             branch=$(echo $pr_detail | cut -d'|' -f2)
+#             pr_number=$(echo $pr_url | awk -F/ '{print $NF}')
+#             pr_info=$(curl -s -H "Authorization: Bearer $GITHUB_TOKEN" "https://api.github.com/repos/$GITHUB_REPOSITORY/pulls/$pr_number")
+#             mergeable=$(echo "$pr_info" | jq -r '.mergeable')
+#             if [ "$mergeable" == "true" ]; then
+#               mergeable_prs+="$pr_url: $branch can be merged from main\n"
+#             else
+#               conflicts_prs+="$pr_url: $branch has merge conflicts with main\n"
+#             fi
+#           done
+
+#           payload="{
+#             \"text\": \"$mergeable_prs\n$conflicts_prs\"
+#           }"
+#           curl -X POST -H 'Content-type: application/json' --data "$payload" $SLACK_WEBHOOK_URL

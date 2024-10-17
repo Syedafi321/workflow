@@ -1,0 +1,78 @@
+name: Selective Folder Merge and Auto-Merge
+
+on:
+  pull_request:
+    branches: [ main ]
+    types: [ opened, synchronize ]
+
+jobs:
+  selective-merge-and-auto-merge:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+      with:
+        fetch-depth: 0
+
+    - name: Set up Git
+      run: |
+        git config user.name github-actions
+        git config user.email github-actions@github.com
+
+    - name: Create filtered branch
+      run: |
+        git checkout -b filtered-branch ${{ github.head_ref }}
+        git sparse-checkout set dev prod qa
+        git add dev prod qa
+        git commit -m "Filtered changes from ${{ github.head_ref }} branch"
+        git push origin filtered-branch
+
+    - name: Update PR
+      run: |
+        gh pr edit ${{ github.event.pull_request.number }} --base main --head filtered-branch
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Comment on PR
+      uses: actions/github-script@v6
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        script: |
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.name,
+            body: 'This PR has been automatically updated to include only changes from the dev, prod, and qa folders.'
+          })
+
+    - name: Auto-merge PR
+      run: |
+        gh pr merge ${{ github.event.pull_request.number }} --auto --merge
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Comment on successful merge
+      if: success()
+      uses: actions/github-script@v6
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        script: |
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.name,
+            body: 'The filtered changes have been automatically merged into the main branch.'
+          })
+
+    - name: Comment on merge failure
+      if: failure()
+      uses: actions/github-script@v6
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        script: |
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.name,
+            body: 'Automatic merge failed. Please resolve any conflicts and try again.'
+          })
